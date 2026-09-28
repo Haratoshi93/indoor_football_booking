@@ -14,6 +14,5 @@ jobs:
       - name: Ping Streamlit App
         run: |
           echo "Pinging Streamlit App to keep it awake..."
-          # TODO: アプリを公開した後に、発行されたURLに書き換えてください
-          curl -s https://haratoshi93-indoor-football-xxxxxxxx.streamlit.app/ > /dev/null
+          curl -s https://indoorfootballbooking.streamlit.app/ > /dev/null
           echo "Done!"
