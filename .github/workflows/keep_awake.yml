@@ -1,0 +1,19 @@
+name: Keep Streamlit Awake
+
+on:
+  schedule:
+    # 毎日 午前9時 (UTCの0時) と 午後9時 (UTCの12時) に実行して確実にスリープを防ぐ
+    - cron: '0 0,12 * * *'
+  workflow_dispatch: # 手動実行用
+
+jobs:
+  ping-app:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Ping Streamlit App
+        run: |
+          echo "Pinging Streamlit App to keep it awake..."
+          # TODO: アプリを公開した後に、発行されたURLに書き換えてください
+          curl -s https://haratoshi93-indoor-football-xxxxxxxx.streamlit.app/ > /dev/null
+          echo "Done!"
