@@ -2,17 +2,73 @@ name: Keep Streamlit Awake
 
 on:
   schedule:
-    # 毎日 午前9時 (UTCの0時) と 午後9時 (UTCの12時) に実行して確実にスリープを防ぐ
-    - cron: '0 0,12 * * *'
+    # 6時間ごとにブラウザでアクセスしてアプリを起こす
+    - cron: '0 */6 * * *'
+    # 毎月1日の0時にダミーコミットを行ってGitHub Actionsの自動停止(60日ルール)を回避する
+    - cron: '0 0 1 * *'
   workflow_dispatch: # 手動実行用
 
+permissions:
+  contents: write # ダミーコミットのPush権限
+
 jobs:
-  ping-app:
+  keep-awake:
+    # 毎月1日のダミーコミット用スケジュール"以外"で実行（6時間ごと、または手動）
+    if: github.event.schedule != '0 0 1 * *'
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Ping Streamlit App
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Playwright
         run: |
-          echo "Pinging Streamlit App to keep it awake..."
-          curl -sL -b /tmp/cookies.txt -c /tmp/cookies.txt https://indoorfootballbooking.streamlit.app/_stcore/health > /dev/null || true
-          echo "Done!"
+          python -m pip install --upgrade pip
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Wake up Streamlit App
+        run: |
+          python -c "
+          from playwright.sync_api import sync_playwright
+          URL = 'https://indoorfootballbooking.streamlit.app/'
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              page = browser.new_page()
+              print(f'Navigating to {URL}')
+              try:
+                  page.goto(URL, wait_until='domcontentloaded', timeout=30000)
+                  page.wait_for_timeout(5000) # 描画待機
+                  
+                  # スリープ復旧ボタンの検索
+                  btn = page.locator('text=Yes, get this app back up!')
+                  if btn.count() > 0:
+                      print('App is sleeping. Clicking wake up button...')
+                      btn.click()
+                      page.wait_for_timeout(10000) # 復旧待機
+                      print('App woke up successfully.')
+                  else:
+                      print('App is already awake (no sleep button found).')
+              except Exception as e:
+                  print(f'Error during wake up process: {e}')
+              finally:
+                  browser.close()
+          "
+
+  dummy-commit:
+    # 毎月1日のスケジュール実行時にのみ動かす
+    if: github.event.schedule == '0 0 1 * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create dummy commit
+        run: |
+          date > .github/keepalive.txt
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add .github/keepalive.txt
+          git commit -m 'chore: dummy commit to prevent GitHub Actions from disabling cron' || echo "No changes"
+          git push
