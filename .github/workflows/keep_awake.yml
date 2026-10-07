@@ -1,18 +1,17 @@
-name: Keep Streamlit Awake
+﻿name: Keep Streamlit Awake
 
 on:
   schedule:
-    # 3時間ごとにブラウザでアクセスしてアプリを起こす
     - cron: '0 * * * *'
-    # 毎月1日の0時にダミ�Eコミットを行ってGitHub Actionsの自動停止(60日ルール)を回避する
     - cron: '0 0 1 * *'
-  workflow_dispatch: # 手動実行用
+  workflow_dispatch:
 
 permissions:
-  contents: write # ダミ�Eコミット�EPush権陁E
+  contents: write
+
 jobs:
   keep-awake:
-    # 毎月1日のダミ�Eコミット用スケジュール"以夁Eで実行！E時間ごと、また�E手動�E�E    if: github.event.schedule != '0 0 1 * *'
+    if: github.event.schedule != '0 0 1 * *'
     runs-on: ubuntu-latest
     steps:
       - name: Set up Python
@@ -38,15 +37,13 @@ jobs:
               try:
                   print('Waiting for page load or sleep button to appear...')
                   page.goto(URL, timeout=60000)
-                  
-                  # 動的征E��でスリープ復旧ボタンを検索
                   btn = page.locator('button:has-text(\"Yes, get this app back up\")')
                   btn.wait_for(state='visible', timeout=60000)
-                  
                   if btn.is_visible():
                       print('App is sleeping. Clicking wake up button...')
                       btn.first.click()
-                      page.wait_for_timeout(60000) # クリチE��後�E復旧征E��E                      print('App woke up successfully.')
+                      page.wait_for_timeout(60000)
+                      print('App woke up successfully.')
               except Exception as e:
                   print('Sleep button not found. App is likely already awake.')
               finally:
@@ -54,7 +51,7 @@ jobs:
           "
 
   dummy-commit:
-    # 毎月1日のスケジュール実行時にのみ動かぁE    if: github.event.schedule == '0 0 1 * *'
+    if: github.event.schedule == '0 0 1 * *'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -66,5 +63,5 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add .github/keepalive.txt
-          git commit -m 'chore: dummy commit to prevent GitHub Actions from disabling cron' || echo "No changes"
+          git commit -m 'chore: dummy commit to prevent GitHub Actions from disabling cron' || echo 'No changes'
           git push
