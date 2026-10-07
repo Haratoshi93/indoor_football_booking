@@ -3,18 +3,16 @@ name: Keep Streamlit Awake
 on:
   schedule:
     # 3時間ごとにブラウザでアクセスしてアプリを起こす
-    - cron: '0 */3 * * *'
-    # 毎月1日の0時にダミーコミットを行ってGitHub Actionsの自動停止(60日ルール)を回避する
+    - cron: '0 * * * *'
+    # 毎月1日の0時にダミ�Eコミットを行ってGitHub Actionsの自動停止(60日ルール)を回避する
     - cron: '0 0 1 * *'
   workflow_dispatch: # 手動実行用
 
 permissions:
-  contents: write # ダミーコミットのPush権限
-
+  contents: write # ダミ�Eコミット�EPush権陁E
 jobs:
   keep-awake:
-    # 毎月1日のダミーコミット用スケジュール"以外"で実行（3時間ごと、または手動）
-    if: github.event.schedule != '0 0 1 * *'
+    # 毎月1日のダミ�Eコミット用スケジュール"以夁Eで実行！E時間ごと、また�E手動�E�E    if: github.event.schedule != '0 0 1 * *'
     runs-on: ubuntu-latest
     steps:
       - name: Set up Python
@@ -39,17 +37,16 @@ jobs:
               print(f'Navigating to {URL}')
               try:
                   print('Waiting for page load or sleep button to appear...')
-                  page.goto(URL, wait_until='networkidle', timeout=60000)
+                  page.goto(URL, timeout=60000)
                   
-                  # 動的待機でスリープ復旧ボタンを検索
+                  # 動的征E��でスリープ復旧ボタンを検索
                   btn = page.locator('button:has-text(\"Yes, get this app back up\")')
                   btn.wait_for(state='visible', timeout=60000)
                   
                   if btn.is_visible():
                       print('App is sleeping. Clicking wake up button...')
                       btn.first.click()
-                      page.wait_for_timeout(60000) # クリック後の復旧待機
-                      print('App woke up successfully.')
+                      page.wait_for_timeout(60000) # クリチE��後�E復旧征E��E                      print('App woke up successfully.')
               except Exception as e:
                   print('Sleep button not found. App is likely already awake.')
               finally:
@@ -57,8 +54,7 @@ jobs:
           "
 
   dummy-commit:
-    # 毎月1日のスケジュール実行時にのみ動かす
-    if: github.event.schedule == '0 0 1 * *'
+    # 毎月1日のスケジュール実行時にのみ動かぁE    if: github.event.schedule == '0 0 1 * *'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
