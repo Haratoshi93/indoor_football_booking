@@ -2,8 +2,8 @@ name: Keep Streamlit Awake
 
 on:
   schedule:
-    # 6時間ごとにブラウザでアクセスしてアプリを起こす
-    - cron: '0 */6 * * *'
+    # 3時間ごとにブラウザでアクセスしてアプリを起こす
+    - cron: '0 */3 * * *'
     # 毎月1日の0時にダミーコミットを行ってGitHub Actionsの自動停止(60日ルール)を回避する
     - cron: '0 0 1 * *'
   workflow_dispatch: # 手動実行用
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   keep-awake:
-    # 毎月1日のダミーコミット用スケジュール"以外"で実行（6時間ごと、または手動）
+    # 毎月1日のダミーコミット用スケジュール"以外"で実行（3時間ごと、または手動）
     if: github.event.schedule != '0 0 1 * *'
     runs-on: ubuntu-latest
     steps:
@@ -38,20 +38,20 @@ jobs:
               page = browser.new_page()
               print(f'Navigating to {URL}')
               try:
-                  page.goto(URL, wait_until='domcontentloaded', timeout=30000)
-                  page.wait_for_timeout(5000) # 描画待機
+                  print('Waiting for page load or sleep button to appear...')
+                  page.goto(URL, wait_until='networkidle', timeout=60000)
                   
-                  # スリープ復旧ボタンの検索
-                  btn = page.locator('text=Yes, get this app back up!')
-                  if btn.count() > 0:
+                  # 動的待機でスリープ復旧ボタンを検索
+                  btn = page.locator('button:has-text(\"Yes, get this app back up\")')
+                  btn.wait_for(state='visible', timeout=60000)
+                  
+                  if btn.is_visible():
                       print('App is sleeping. Clicking wake up button...')
-                      btn.click()
-                      page.wait_for_timeout(10000) # 復旧待機
+                      btn.first.click()
+                      page.wait_for_timeout(60000) # クリック後の復旧待機
                       print('App woke up successfully.')
-                  else:
-                      print('App is already awake (no sleep button found).')
               except Exception as e:
-                  print(f'Error during wake up process: {e}')
+                  print('Sleep button not found. App is likely already awake.')
               finally:
                   browser.close()
           "
