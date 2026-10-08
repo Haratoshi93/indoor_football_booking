@@ -52,7 +52,7 @@ st.markdown(custom_css, unsafe_allow_html=True)
 st.markdown("""
 <div class="page-header">
     <h1>フットサルコート<br>空き状況一覧</h1>
-    <p>募集が開始されている全期間（向こう約10週間分）の「土日祝」「10:00以降開始」「2時間以上連続」で空いている枠を一覧表示します</p>
+    <p>募集が開始されている全期間（向こう約10週間分）の「土日祝」「10:00〜20:00の間」「2時間以上連続」で空いている枠を一覧表示します</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -175,6 +175,10 @@ def fetch_facility_data_for_weeks(shop_code, weeks=10):
                         
                         # 早朝（10時より前に開始）の枠は集まりにくいため除外
                         if parsed['start_min'] < 600:
+                            continue
+                            
+                        # 夜遅く（20時より後に終了）の枠も避けたいため除外
+                        if parsed['end_min'] > 1200:
                             continue
 
                         # 土日祝・今日以降のみ
