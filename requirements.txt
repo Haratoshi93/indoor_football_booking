@@ -3,4 +3,3 @@ playwright
 beautifulsoup4
 pandas
 jpholiday
-playwright-stealth

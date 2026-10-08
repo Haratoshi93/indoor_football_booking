@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync
 from bs4 import BeautifulSoup
 import re
 import datetime
@@ -124,9 +123,6 @@ def fetch_facility_data_for_weeks(shop_code, weeks=10):
                 timezone_id="Asia/Tokyo"
             )
             page = context.new_page()
-            
-            # ステルス化プラグインを適用
-            stealth_sync(page)
 
             # 不要なリソースをブロックして高速化
             def intercept_route(route):
