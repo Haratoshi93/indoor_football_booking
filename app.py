@@ -35,8 +35,6 @@ def get_smart_wait_time():
     except Exception:
         return 3000
         
-import threading
-
 def log_result(shop_code, wait_ms, status):
     """学習結果をCloudflare D1に記録する"""
     try:
@@ -44,13 +42,9 @@ def log_result(shop_code, wait_ms, status):
             "shop_code": str(shop_code),
             "wait_ms": wait_ms,
             "status": status
-        }, timeout=3)
+        }, timeout=5)
     except Exception:
         pass
-
-def log_result_async(shop_code, wait_ms, status):
-    """通信でアプリが止まらないよう、裏側（別スレッド）でログを送信する"""
-    threading.Thread(target=log_result, args=(shop_code, wait_ms, status), daemon=True).start()
 
 # --- クラウド(Streamlit Cloud)環境用: Playwrightの自動インストール ---
 @st.cache_resource
@@ -148,15 +142,15 @@ def format_time(minutes):
     return f"{h:02d}:{m:02d}"
 
 def fetch_facility_data_for_weeks(shop_code, weeks, progress_bar, status_text, current_step, total_steps):
-    """指定した施設の向こう数週間分のデータを一括で取得する"""
+    """指定した施設のデータを取得しつつ進捗を画面に表示する"""
     today = datetime.date.today()
     monday = today - datetime.timedelta(days=today.weekday())
 
     raw_slots = []
-    facility_name = FACILITIES[shop_code]
     
     # 検索開始時にCloudflare D1から「今日の適切な待機時間ベース」を学習・取得する
     base_wait_time = get_smart_wait_time()
+    consecutive_blocks = 0 # 連続ブロック回数
     
     try:
         with sync_playwright() as p:
@@ -186,14 +180,21 @@ def fetch_facility_data_for_weeks(shop_code, weeks, progress_bar, status_text, c
                 target_date = monday + datetime.timedelta(days=i * 7)
                 date_str = f"{target_date.year}/{target_date.month}/{target_date.day}/"
                 url = f"https://yoyaku.labola.jp/r/shop/{shop_code}/calendar_week/{date_str}"
-                
-                status_text.markdown(f"**🤖 AI検索中...** {facility_name} ( {i+1}週目 / {weeks}週 )<br><small>※相手のWAFブロックを回避するため、人間らしく待機しながらページをめくっています</small>", unsafe_allow_html=True)
+
+                # 連続ブロックが多すぎる場合は完全に遮断されたと判断し、これ以上相手に負荷をかけない
+                if consecutive_blocks >= 3:
+                    status_text.warning(f"⚠️ {FACILITIES[shop_code]} はセキュリティブロックが強いためこれ以上検索できません。")
+                    break
 
                 # ボット検知ブロックを回避するためのリトライ＆学習処理
-                max_retries = 2
+                max_retries = 3
+                success = False
                 for attempt in range(max_retries):
-                    # 学習結果のベースタイムに、人間らしいランダムなゆらぎ（0〜1秒）を足す
                     current_wait = base_wait_time + random.randint(0, 1000)
+                    
+                    # 画面に進捗を表示
+                    status_text.text(f"🔍 {FACILITIES[shop_code]} を検索中... ({i+1}/{weeks}週目) [AI待機中: {current_wait/1000:.1f}秒]")
+                    
                     page.wait_for_timeout(current_wait)
                     
                     page.goto(url, wait_until="networkidle", timeout=30000)
@@ -202,17 +203,26 @@ def fetch_facility_data_for_weeks(shop_code, weeks, progress_bar, status_text, c
                     
                     # カレンダーのテーブル枠自体が存在するかチェック（なければブロック画面とみなす）
                     if not soup.find('table'):
-                        # ブロックされたという悲しい事実をD1に記録（裏側で非同期送信）
-                        log_result_async(shop_code, current_wait, "blocked")
+                        print(f"Blocked on {date_str}. Retrying... ({attempt+1}/{max_retries})")
+                        status_text.text(f"🛑 セキュリティに検知されました！息を潜めて再挑戦します... ({attempt+1}/{max_retries})")
+                        log_result(shop_code, current_wait, "blocked")
                         
-                        # 次回のためのペナルティ（長めに待つようにベースを増やす。ただし最大8秒まで）
-                        base_wait_time = min(base_wait_time + 2000, 8000)
-                        page.wait_for_timeout(3000) # 冷却時間
+                        # 次回のためのペナルティ（最大10秒まで）
+                        base_wait_time = min(base_wait_time + 2000, 10000)
+                        page.wait_for_timeout(5000) # 冷却時間
                         continue
                     
-                    # 正常にHTMLが取得できた！この成功体験をD1に記録する（裏側で非同期送信）
-                    log_result_async(shop_code, current_wait, "success")
+                    # 正常にHTMLが取得できた
+                    log_result(shop_code, current_wait, "success")
+                    consecutive_blocks = 0
+                    success = True
                     break
+
+                if not success:
+                    consecutive_blocks += 1
+
+                # 全体のプログレスバーを更新
+                progress_bar.progress(min((current_step + i + 1) / total_steps, 1.0))
 
                 slots = soup.find_all('td', class_='empty')
 
@@ -239,28 +249,33 @@ def fetch_facility_data_for_weeks(shop_code, weeks, progress_bar, status_text, c
 
                         # 土日祝・今日以降のみ
                         if dt >= today and (dt.weekday() >= 5 or jpholiday.is_holiday(dt)):
-                            parsed['facility'] = facility_name
+                            parsed['facility'] = FACILITIES[shop_code]
                             raw_slots.append(parsed)
-                
-                # 進捗バーを更新
-                current_step += 1
-                progress_bar.progress(current_step / total_steps)
 
             browser.close()
     except Exception as e:
-        st.error(f"{facility_name}のデータ取得中にエラーが発生しました: {e}")
+        st.error(f"{FACILITIES[shop_code]}のデータ取得中にエラーが発生しました: {e}")
 
-    return raw_slots, current_step
+    return raw_slots
 
-def fetch_all_data(shop_codes, progress_bar, status_text):
+def fetch_all_data(shop_codes):
     all_raw_slots = []
     weeks = 10
     total_steps = len(shop_codes) * weeks
-    current_step = 0
+    
+    # プログレスバーとステータステキストのUI要素を作成
+    progress_bar = st.progress(0)
+    status_text = st.empty()
 
+    current_step = 0
     for code in shop_codes:
-        res, current_step = fetch_facility_data_for_weeks(code, weeks, progress_bar, status_text, current_step, total_steps)
+        res = fetch_facility_data_for_weeks(code, weeks, progress_bar, status_text, current_step, total_steps)
         all_raw_slots.extend(res)
+        current_step += weeks
+
+    # 検索完了時にUI要素を消去
+    progress_bar.empty()
+    status_text.empty()
 
     # 重複排除
     unique_slots = {}
@@ -316,13 +331,9 @@ if search_clicked:
     if not selected_codes:
         st.warning("施設を1つ以上選択してください。")
     else:
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        with st.spinner("AIが相手のセキュリティを学習・回避しながらデータを取得中です..."):
+        with st.spinner("募集が開始されている全期間（向こう約10週間分）のデータを取得・分析しています...（約1分ほどかかります）"):
             try:
-                data = fetch_all_data(selected_codes, progress_bar, status_text)
-                progress_bar.progress(1.0)
-                status_text.empty()
+                data = fetch_all_data(selected_codes)
             except Exception as e:
                 st.error(f"取得処理でエラーが発生しました: {e}")
                 st.stop()
