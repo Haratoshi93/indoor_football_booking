@@ -127,11 +127,15 @@ def fetch_facility_data_for_weeks(shop_code, weeks=10):
                     route.continue_()
             page.route("**/*", intercept_route)
 
+            import random
             for i in range(weeks):
                 target_date = monday + datetime.timedelta(days=i * 7)
                 date_str = f"{target_date.year}/{target_date.month}/{target_date.day}/"
                 url = f"https://yoyaku.labola.jp/r/shop/{shop_code}/calendar_week/{date_str}"
 
+                # ボット検知対策：アクセス前に1〜2秒のランダムな待機時間を入れる
+                page.wait_for_timeout(random.randint(1000, 2000))
+                
                 page.goto(url, wait_until="networkidle", timeout=30000)
                 html = page.content()
                 soup = BeautifulSoup(html, 'html.parser')
