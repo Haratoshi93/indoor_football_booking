@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from playwright.sync_api import sync_playwright
+from playwright_stealth import stealth_sync
 from bs4 import BeautifulSoup
 import re
 import datetime
@@ -112,12 +113,20 @@ def fetch_facility_data_for_weeks(shop_code, weeks=10):
     raw_slots = []
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled"]
+            )
             # WAFに弾かれないよう標準的なブラウザとして偽装
             context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                locale="ja-JP",
+                timezone_id="Asia/Tokyo"
             )
             page = context.new_page()
+            
+            # ステルス化プラグインを適用
+            stealth_sync(page)
 
             # 不要なリソースをブロックして高速化
             def intercept_route(route):
