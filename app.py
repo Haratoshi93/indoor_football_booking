@@ -8,6 +8,43 @@ import jpholiday
 from collections import defaultdict
 import os
 import subprocess
+import requests
+
+API_URL = "https://cw-data-vault-api.haradatitech.workers.dev/api/futsal-logs"
+
+def get_smart_wait_time():
+    """過去のブロック履歴から最適な待機時間(ms)を計算する"""
+    try:
+        res = requests.get(API_URL, timeout=5)
+        logs = res.json()
+        if not logs:
+            return 3000 # データがなければ3秒
+            
+        recent_blocks = [L for L in logs[:15] if L['status'] == 'blocked']
+        recent_success = [L for L in logs[:15] if L['status'] == 'success']
+        
+        # 直近でブロックが多発している場合は安全第一で5秒スタート
+        if len(recent_blocks) >= 3:
+            return 5000 
+        elif recent_success:
+            # 成功していれば、過去の成功平均タイムから少しだけ攻める(短くする)
+            avg_success = sum(L['wait_ms'] for L in recent_success) / len(recent_success)
+            # ただし最低2000msは死守する
+            return max(2000, int(avg_success) - 200)
+        return 3000
+    except Exception:
+        return 3000
+        
+def log_result(shop_code, wait_ms, status):
+    """学習結果をCloudflare D1に記録する"""
+    try:
+        requests.post(API_URL, json={
+            "shop_code": str(shop_code),
+            "wait_ms": wait_ms,
+            "status": status
+        }, timeout=5)
+    except Exception:
+        pass
 
 # --- クラウド(Streamlit Cloud)環境用: Playwrightの自動インストール ---
 @st.cache_resource
@@ -110,6 +147,10 @@ def fetch_facility_data_for_weeks(shop_code, weeks=10):
     monday = today - datetime.timedelta(days=today.weekday())
 
     raw_slots = []
+    
+    # 検索開始時にCloudflare D1から「今日の適切な待機時間ベース」を学習・取得する
+    base_wait_time = get_smart_wait_time()
+    
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(
@@ -139,11 +180,12 @@ def fetch_facility_data_for_weeks(shop_code, weeks=10):
                 date_str = f"{target_date.year}/{target_date.month}/{target_date.day}/"
                 url = f"https://yoyaku.labola.jp/r/shop/{shop_code}/calendar_week/{date_str}"
 
-                # ボット検知ブロックを回避するためのリトライ処理
+                # ボット検知ブロックを回避するためのリトライ＆学習処理
                 max_retries = 3
                 for attempt in range(max_retries):
-                    # アクセス前に人間らしい長めの待機時間を入れる
-                    page.wait_for_timeout(random.randint(2000, 4000))
+                    # 学習結果のベースタイムに、人間らしいランダムなゆらぎ（0〜1秒）を足す
+                    current_wait = base_wait_time + random.randint(0, 1000)
+                    page.wait_for_timeout(current_wait)
                     
                     page.goto(url, wait_until="networkidle", timeout=30000)
                     html = page.content()
@@ -152,10 +194,16 @@ def fetch_facility_data_for_weeks(shop_code, weeks=10):
                     # カレンダーのテーブル枠自体が存在するかチェック（なければブロック画面とみなす）
                     if not soup.find('table'):
                         print(f"Blocked on {date_str}. Retrying... ({attempt+1}/{max_retries})")
-                        page.wait_for_timeout(5000) # ブロックされたら5秒待って再試行
+                        # ブロックされたという悲しい事実をD1に記録し、システムに学習させる
+                        log_result(shop_code, current_wait, "blocked")
+                        
+                        # 次回のためのペナルティ（長めに待つようにベースを増やす）
+                        base_wait_time += 2000
+                        page.wait_for_timeout(5000) # 冷却時間
                         continue
                     
-                    # 正常にHTMLが取得できたらループを抜けて解析へ
+                    # 正常にHTMLが取得できた！この成功体験をD1に記録する
+                    log_result(shop_code, current_wait, "success")
                     break
 
                 slots = soup.find_all('td', class_='empty')
