@@ -144,8 +144,8 @@ def fetch_facility_data_for_weeks(shop_code, weeks=10):
 
                     parsed = parse_slot_text(raw_text, target_date.year)
                     if parsed:
-                        # 屋根無のコートは対象外
-                        if "屋根無" in parsed['court'] or "屋根なし" in parsed['court']:
+                        # 屋根無のコート、およびパーティールームは対象外
+                        if "屋根無" in parsed['court'] or "屋根なし" in parsed['court'] or "プレミアム・マルシェ・ロマン" in parsed['court']:
                             continue
 
                         dt = parsed['date_obj']
@@ -212,8 +212,7 @@ def fetch_all_data(shop_codes):
                     "_sort_date": m['date_obj'].month * 100 + m['date_obj'].day,
                     "時間帯": f"{format_time(m['start_min'])}-{format_time(m['end_min'])}",
                     "連続時間": f"{hours:g}時間",
-                    "コート": m['court'],
-                    "状態": "〇 予約可能"
+                    "コート": m['court']
                 })
 
     return valid_slots
