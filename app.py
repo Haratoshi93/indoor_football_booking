@@ -104,8 +104,8 @@ def format_time(minutes):
     m = minutes % 60
     return f"{h:02d}:{m:02d}"
 
-def fetch_facility_data_for_weeks(shop_code, weeks=9):
-    """指定した施設の向こう数週間分(デフォルト9週間=約2ヶ月強)のデータを一括で取得する"""
+def fetch_facility_data_for_weeks(shop_code, weeks=10):
+    """指定した施設の向こう数週間分(デフォルト10週間=約2ヶ月半)のデータを一括で取得する"""
     today = datetime.date.today()
     monday = today - datetime.timedelta(days=today.weekday())
 
@@ -164,7 +164,7 @@ def fetch_all_data(shop_codes):
     all_raw_slots = []
 
     for code in shop_codes:
-        res = fetch_facility_data_for_weeks(code, weeks=9)
+        res = fetch_facility_data_for_weeks(code, weeks=10)
         all_raw_slots.extend(res)
 
     # 重複排除
