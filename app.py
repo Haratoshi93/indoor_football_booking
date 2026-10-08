@@ -222,7 +222,7 @@ if search_clicked:
     if not selected_codes:
         st.warning("施設を1つ以上選択してください。")
     else:
-        with st.spinner("募集が開始されている全期間（向こう約2ヶ月分）のデータを取得・分析しています...（約45秒ほどかかります）"):
+        with st.spinner("募集が開始されている全期間（向こう約10週間分）のデータを取得・分析しています...（約1分ほどかかります）"):
             try:
                 data = fetch_all_data(selected_codes)
             except Exception as e:
@@ -231,9 +231,16 @@ if search_clicked:
 
             if data:
                 df = pd.DataFrame(data)
+                
+                # デバッグ用：取得できた最新の日付を確認する
+                max_date = df['_sort_date'].max()
+                max_month = max_date // 100
+                max_day = max_date % 100
+                
                 df = df.sort_values(by=['_sort_date', '時間帯', '施設']).drop(columns=['_sort_date'])
 
-                st.success(f"向こう約2ヶ月間で、{len(data)}件の「土日祝で2時間以上連続する空き枠」が見つかりました！")
+                st.success(f"向こう約2ヶ月半間で、{len(data)}件の「土日祝で2時間以上連続する空き枠」が見つかりました！")
+                st.info(f"💡 【システム状況】システムが一番遠くまで取得できた日付は **{max_month}月{max_day}日** でした。もしこれより先の枠がある場合は範囲外です。")
 
                 st.markdown('<div class="result-panel">', unsafe_allow_html=True)
                 st.dataframe(df, use_container_width=True, hide_index=True)
